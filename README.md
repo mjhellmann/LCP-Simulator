@@ -1,5 +1,5 @@
 # LCP Simulator
-Underlying scripts of the LCP Simulator and a description of their implementation in the web application builder Anvil Works.
+This repository contains all underlying scripts of the LCP Simulator and a description of their implementation in the web application builder Anvil Works. Details on what the LCP Simulator does and how to use this web tool can be found in detail on the website itself which is equipped with extensive guidelines and help and error messages.
 
 The Linear CoPolymer Simulator (LCP Simulator) is a Python-based, user-friendly web tool available to anyone at: https://lcp-simulator.anvil.app. It can simulate linear polymers consisting of two different building blocks (A and B) and their behavior during (enzymatic) cleavage and/or analytics, and is supposed to be of use for anyone performing analytics or molecular biology on those type of copolymers. 
 
