@@ -17,65 +17,92 @@ import pandas as pd
 # them with @anvil.server.callable.
 
 #### GENERAL FUNCTIONS ####
-def chitosan_generator(DP, overall_FA, pattern, FA_pattern):
-    """Generates one chitosan molecule of a specific DP and overall FA.
-    If the given FA_pattern equals the given overall FA, the chitosan
-    molecule features a random PA. Otherwise, every nth unit (n = pattern)
-    features either an overrepresentation of A-units (FA_pattern > FA) or
-    of D-units (FA_pattern < FA).
 
-    returns chitosan molecule: ["D", "A", "D", "D", "A", ...]"""
+def chitosan_generator(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks):
+    """Generates one chitosan molecule of either...
+    A) a specific DP and overall FA. If the given FA_pattern equals the given
+    overall FA, the chitosan molecule features a random PA. Otherwise, every
+    nth unit (n = pattern) features either an overrepresentation of A-units
+    (FA_pattern > FA) or of B-units (FA_pattern < FA).
+    B) a specific DP and exactly defined blocks of A- and B-units, e.g. always
+    3 As followed by always 2 Bs. It is chosen at random whether the molecule
+    starts with an A- or B-block.
 
-    # calculate FA_non_pattern of all residues that are not part of pattern
-    pattern_spaces = int(np.ceil(DP / pattern))
-    non_pattern_spaces = DP - pattern_spaces
-    proportion_pattern = pattern_spaces / DP
-    proportion_non_pattern = non_pattern_spaces / DP
-    FA_non_pattern = ((overall_FA - proportion_pattern * FA_pattern) /
-                      proportion_non_pattern)
-    if FA_non_pattern < 0:
-        print("ERROR: combination of overall_FA, FA_pattern and pattern not \
-sensible!")
-        exit()
-    # generate A/D-sequence lists for residues that are (not) part of pattern
-    pattern_list = ["A" if random.choices(["A", "B"],
-                                          [FA_pattern,
-                                          1 - FA_pattern])
-                    == ["A"]
-                    else "B" for i in range(int(pattern_spaces))]
-    non_pattern_list = ["A" if random.choices(["A", "B"],
-                                              [FA_non_pattern,
-                                              1 - FA_non_pattern])
+    returns chitosan molecule in format: ["B", "A", "B", "B", "A", ...]"""
+
+    # OPTION A: specific FA and pattern
+    if A_blocks == 0 and B_blocks == 0:
+        # calculate FA_non_pattern of all residues that are not part of pattern
+        pattern_spaces = int(np.ceil(DP / pattern))
+        non_pattern_spaces = DP - pattern_spaces
+        proportion_pattern = pattern_spaces / DP
+        proportion_non_pattern = non_pattern_spaces / DP
+        FA_non_pattern = ((overall_FA - proportion_pattern * FA_pattern) /
+                          proportion_non_pattern)
+        if FA_non_pattern < 0:
+            print("ERROR: combination of overall_FA, FA_pattern and pattern not \
+    sensible!")
+            exit()
+        # generate A/B-sequence lists for residues that are (not) part of pattern
+        pattern_list = ["A" if random.choices(["A", "B"],
+                                              [FA_pattern,
+                                              1 - FA_pattern])
                         == ["A"]
-                        else "B" for i in range(int(non_pattern_spaces))]
-    # insert pattern sequence into non-pattern sequence at every nth product
-    nth_index = list(range(0, DP, pattern))
-    position_pattern_list = 0
-    for position in nth_index:
-        non_pattern_list.insert(position, pattern_list[position_pattern_list])
-        position_pattern_list += 1
-    return non_pattern_list
+                        else "B" for i in range(int(pattern_spaces))]
+        non_pattern_list = ["A" if random.choices(["A", "B"],
+                                                  [FA_non_pattern,
+                                                  1 - FA_non_pattern])
+                            == ["A"]
+                            else "B" for i in range(int(non_pattern_spaces))]
+        # insert pattern sequence into non-pattern sequence at every nth product
+        nth_index = list(range(0, DP, pattern))
+        position_pattern_list = 0
+        for position in nth_index:
+            non_pattern_list.insert(position, pattern_list[position_pattern_list])
+            position_pattern_list += 1
+        final_molecule = non_pattern_list
 
-def chitosan_library(DP, overall_FA, pattern, FA_pattern, number_molecules):
+    # OPTION B: specific A- and B-blocks
+    else:
+        block_polymer = []
+        A_seq = ["A"] * A_blocks
+        B_seq = ["B"] * B_blocks
+        A_or_B = random.choices(["A", "B"], [0.5, 0.5])
+        if A_or_B == ["A"]:
+            block_polymer.extend(A_seq)
+        elif A_or_B == ["B"]:
+            block_polymer.extend(B_seq)
+        while len(block_polymer) < DP:
+            if block_polymer[-1] == "A":
+                block_polymer.extend(B_seq)
+            elif block_polymer[-1] == "B":
+                block_polymer.extend(A_seq)
+        final_molecule = block_polymer[0:DP]
+    return final_molecule
+
+
+def chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks,
+    number_molecules):
     """Generates library containing a given number of chitosan molecules
     created via chitosan_generator.
 
     returns chitosan library: ["molecule1", "molecule2", ...] with molecule1
-    e.g. = "DADDDAAD" """
+    e.g. = "BABBBAAB" """
 
     library = []
     for i in range(0, number_molecules):
         molecule = "".join(chitosan_generator(DP, overall_FA, pattern,
-                                              FA_pattern))
+                                              FA_pattern, A_blocks, B_blocks))
         library.append(molecule)
     return library
+
 
 def enzyme(substrate, minus_specificity, plus_specificity, efficiency):
     """Simulates cleavage of an individual chitosan molecule (given as string)
     by an enzyme of given specificity. The plus and minus specificities always
-    consist of three characters, e.g. AAA, ADD, AXX, AD., ...
-    with A = GlcNAc, D = GlcN, X = GlcNAc or GlcN but subsite needs to be
-    occupied, . = GlcNAc or GlcN or unoccupied.
+    consist of three characters, e.g. AAA, ABB, AXX, AB., ...
+    with A = unit A, B = unit B, X = A or B but subsite needs to be
+    occupied, . = A or B or unoccupied.
 
     returns a list of products: [product1, product2, ...]"""
 
@@ -126,9 +153,10 @@ def enzyme(substrate, minus_specificity, plus_specificity, efficiency):
         product_list.append(partial_dig_sub_list[product])
     return product_list
 
+
 def nano2(substrate, cuts):
     """Simulates cleavage of an individual chitosan molecule (given as string)
-    using sodium nitrite (NaNO3) that cleaves after each D-unit
+    using sodium nitrite (NaNO3) that cleaves after each B-unit
 
     returns a list of products: [product1, product2, ...]"""
 
@@ -158,6 +186,7 @@ def nano2(substrate, cuts):
     product_list = product_str.split("-")
     return product_list
 
+
 def FA_pattern_calc(overall_FA, pattern, strength):
     """Calculates the FA_pattern for a given overall FA and pattern that
     corresponds to a certain strength of this pattern (value between 0 and 1):
@@ -179,8 +208,9 @@ def FA_pattern_calc(overall_FA, pattern, strength):
             FA_pattern = FA_pattern_raw
     return(FA_pattern)
 
+
 def calc_DP(oligomer):
-    """Takes the string of an oligomer as input (e.g. A1D12) and returns the
+    """Takes the string of an oligomer as input (e.g. A1B12) and returns the
     corresponding DP (e.g. 13)"""
     temp = "0"
     sum = 0
@@ -192,56 +222,58 @@ def calc_DP(oligomer):
             temp = "0"
     return sum + int(temp)
 
-def diads_PA(library):
-    """Determines diad frequencies (AA, AD, DA and DD) and calculates the PA
-    value for a given chitosan library.
 
-    returns respective values in a list: [AA, AD, DA, DD, PA]"""
+def diads_PA(library):
+    """Determines diad frequencies (AA, AB, BA and BB) and calculates the PA
+    value for a given library.
+
+    returns respective values in a list: [AA, AB, BA, BB, PA]"""
 
     # count diads
     AA = 0
-    AD = 0
-    DA = 0
-    DD = 0
+    AB = 0
+    BA = 0
+    BB = 0
     for molecule in library:
         for idx, monomer in enumerate(molecule[:-1]):
             if monomer == "A":
                 if molecule[idx + 1] == "A":
                     AA += 1
                 elif molecule[idx + 1] == "B":
-                    AD += 1
+                    AB += 1
             elif monomer == "B":
                 if molecule[idx + 1] == "A":
-                    DA += 1
+                    BA += 1
                 elif molecule[idx + 1] == "B":
-                    DD += 1
-    sum_all_diads = AA + AD + DA + DD
+                    BB += 1
+    sum_all_diads = AA + AB + BA + BB
     # calculate diad frequencies
     F_AA = AA / sum_all_diads
-    F_DD = DD / sum_all_diads
-    F_DA = DA / sum_all_diads
-    F_AD = AD / sum_all_diads
-    F_AD_DA = (AD + DA) / sum_all_diads
+    F_BB = BB / sum_all_diads
+    F_BA = BA / sum_all_diads
+    F_AB = AB / sum_all_diads
+    F_AB_BA = (AB + BA) / sum_all_diads
     # calculate PA value based on Kumirska et al. (2009)
-    PA = F_AD_DA / (2 * F_AA + F_AD_DA) + F_AD_DA / (2 * F_DD + F_AD_DA)
-    output = [F_AA, F_AD, F_DA, F_DD, PA]
+    PA = F_AB_BA / (2 * F_AA + F_AB_BA) + F_AB_BA / (2 * F_BB + F_AB_BA)
+    output = [F_AA, F_AB, F_BA, F_BB, PA]
     return output
 
+
 def triads(library):
-    """Determines triad frequencies (AAA, AAD, DAA, ADA, ADD, DDA, DAD, DDD)
+    """Determines triad frequencies (AAA, AAB, BAA, ABA, ABB, BBA, BAB, BBB)
     and calculates their fractions for a given chitosan library.
 
-    returns values in list: [AAA, AAD, DAA, ADA, ADD, DDA, DAD, DDD]"""
+    returns values in list: [AAA, AAB, BAA, ABA, ABB, BBA, BAB, BBB]"""
 
     # count triads
     AAA = 0
-    AAD = 0
-    DAA = 0
-    ADA = 0
-    ADD = 0
-    DDA = 0
-    DAD = 0
-    DDD = 0
+    AAB = 0
+    BAA = 0
+    ABA = 0
+    ABB = 0
+    BBA = 0
+    BAB = 0
+    BBB = 0
     for molecule in library:
         for idx, monomer in enumerate(molecule[:-2]):
             if monomer == "A":
@@ -249,39 +281,40 @@ def triads(library):
                     if molecule[idx + 2] == "A":
                         AAA += 1
                     elif molecule[idx + 2] == "B":
-                        AAD += 1
+                        AAB += 1
                 elif molecule[idx + 1] == "B":
                     if molecule[idx + 2] == "A":
-                        ADA += 1
+                        ABA += 1
                     elif molecule[idx + 2] == "B":
-                        ADD += 1
+                        ABB += 1
             elif monomer == "B":
                 if molecule[idx + 1] == "A":
                     if molecule[idx + 2] == "A":
-                        DAA += 1
+                        BAA += 1
                     elif molecule[idx + 2] == "B":
-                        DAD += 1
+                        BAB += 1
                 elif molecule[idx + 1] == "B":
                     if molecule[idx + 2] == "A":
-                        DDA += 1
+                        BBA += 1
                     elif molecule[idx + 2] == "B":
-                        DDD += 1
-    sum_all_triads = AAA + AAD + DAA + ADA + ADD + DDA + DAD + DDD
+                        BBB += 1
+    sum_all_triads = AAA + AAB + BAA + ABA + ABB + BBA + BAB + BBB
     # calculate triad frequencies
     F_AAA = AAA / sum_all_triads
-    F_AAD = AAD / sum_all_triads
-    F_DAA = DAA / sum_all_triads
-    F_ADA = ADA / sum_all_triads
-    F_ADD = ADD / sum_all_triads
-    F_DDA = DDA / sum_all_triads
-    F_DAD = DAD / sum_all_triads
-    F_DDD = DDD / sum_all_triads
-    output = [F_AAA, F_AAD, F_DAA, F_ADA, F_ADD, F_DDA, F_DAD, F_DDD]
+    F_AAB = AAB / sum_all_triads
+    F_BAA = BAA / sum_all_triads
+    F_ABA = ABA / sum_all_triads
+    F_ABB = ABB / sum_all_triads
+    F_BBA = BBA / sum_all_triads
+    F_BAB = BAB / sum_all_triads
+    F_BBB = BBB / sum_all_triads
+    output = [F_AAA, F_AAB, F_BAA, F_ABA, F_ABB, F_BBA, F_BAB, F_BBB]
     return output
 
+
 def blocks(product_list, A_cutoff, DP_cutoff, ion_eff):
-    """Takes list of chitinosanase products (["DA", "DDDA", "DA"]) and
-    calculates the block sizes An, Dn, Aw and Dw.
+    """Takes list of chitinosanase products (["BA", "BBBA", "BA"]) and
+    calculates the block sizes An, Bn, Aw and Bw.
     It is possible to:
     -set an A_cutoff: products with more A-units than this cutoff are excluded
     due to their potential insolublity
@@ -290,27 +323,27 @@ def blocks(product_list, A_cutoff, DP_cutoff, ion_eff):
     -consider or not consider the different ionization_efficiencies of the
     different products
 
-    returns block_sizes: (block_An, block_Dn, block_Aw, block_Dw)"""
+    returns block_sizes: (block_An, block_Bn, block_Aw, block_Bw)"""
 
     # remove products bigger than DP_cutoff and with more As than A_cutoff
-    a_d_tuple_list = []
+    a_b_tuple_list = []
     if A_cutoff == False and DP_cutoff == False:
         for oligomer in product_list:
-            a_d_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
+            a_b_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
     elif A_cutoff != False and DP_cutoff == False:
         for oligomer in product_list:
             if oligomer.count("A") <= A_cutoff:
-                a_d_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
+                a_b_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
     elif A_cutoff == False and DP_cutoff != False:
         for oligomer in product_list:
             if len(oligomer) <= DP_cutoff:
-                a_d_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
+                a_b_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
     elif A_cutoff != False and DP_cutoff != False:
         for oligomer in product_list:
             if len(oligomer) <= DP_cutoff and oligomer.count("A") <= A_cutoff:
-                a_d_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
+                a_b_tuple_list.append((oligomer.count("A"), oligomer.count("B")))
     # create dictionary with numbers of each chitinosanase product
-    product_dict = dict(Counter(a_d_tuple_list))
+    product_dict = dict(Counter(a_b_tuple_list))
     # if applicable: consider different ionization efficiencies per DP
     if ion_eff:
         for product in product_dict:
@@ -324,11 +357,11 @@ def blocks(product_list, A_cutoff, DP_cutoff, ion_eff):
                 product_dict[product] *= 0.35
             elif sum(product) > 8:
                 product_dict[product] *= 0.2
-    # calculate block-sizes, product[0] = number As, product[1] = number Ds
+    # calculate block-sizes, product[0] = number As, product[1] = number Bs
     block_An = 0
-    block_Dn = 0
+    block_Bn = 0
     Aw_sum = 0
-    Dw_sum = 0
+    Bw_sum = 0
     DP_sum = 0
     sum_all_products = sum(product_dict.values())
     for product in product_dict:
@@ -336,20 +369,22 @@ def blocks(product_list, A_cutoff, DP_cutoff, ion_eff):
                                  sum_all_products)
         product_DP = sum(product)
         block_An += product[0] * rel_abundance_product
-        block_Dn += product[1] * rel_abundance_product
+        block_Bn += product[1] * rel_abundance_product
         Aw_sum += product[0] * rel_abundance_product * product_DP
-        Dw_sum += product[1] * rel_abundance_product * product_DP
+        Bw_sum += product[1] * rel_abundance_product * product_DP
         DP_sum += rel_abundance_product * product_DP
     block_Aw = Aw_sum/DP_sum
-    block_Dw = Dw_sum/DP_sum
-    block_sizes = [block_An, block_Dn, block_Aw, block_Dw]
+    block_Bw = Bw_sum/DP_sum
+    block_sizes = [block_An, block_Bn, block_Aw, block_Bw]
     return block_sizes
 
+
 #### DP HISTOGRAM ####
+
 @anvil.server.callable
-def histogram_DP_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, minus_specificity, plus_specificity, efficiency):
+def histogram_DP_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and count products per DP and track FA
     product_dict = {}
     all_products = 0
@@ -376,10 +411,11 @@ def histogram_DP_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, molecules
     output_list = [DP_list, mole_fraction_list, average_FA_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def histogram_DP_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cuts):
+def histogram_DP_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, cuts):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and count products per DP and track FA
     product_dict = {}
     all_products = 0
@@ -406,149 +442,11 @@ def histogram_DP_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, molecules,
     output_list = [DP_list, mole_fraction_list, average_FA_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def histogram_DP_FAp_weight_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
+def histogram_DP_FAp_weight_enzyme(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
-    # cleave and count products per DP and track FA
-    product_dict = {}
-    all_products = 0
-    for substrate in library:
-        product_list = enzyme(substrate, minus_specificity, plus_specificity, efficiency)
-        for product in product_list:
-            all_products += 1
-            if len(product) in product_dict:
-                product_dict[len(product)][0] += 1
-                product_dict[len(product)][1] += product.count("A")
-            else:
-                product_dict[len(product)] = [1, product.count("A")]
-    # calculate average FA and prepare output list
-    DP_list = []
-    average_FA_list = []
-    mass_mole_fraction_list = []
-    mass_mole_fraction_sum = 0
-    weight_fraction_list = []
-    for DP in range(min(product_dict), max(product_dict) + 1):
-        if DP in product_dict:
-            DP_list.append(DP)
-            mole_fraction = product_dict[DP][0] / all_products
-            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
-            average_FA_list.append(average_FA)
-            average_mass = DP * (average_FA * mass_A + (1-average_FA) * mass_B) - (DP-1)*18
-            mass_mole_fraction = mole_fraction * average_mass
-            mass_mole_fraction_list.append(mass_mole_fraction)
-            mass_mole_fraction_sum += mass_mole_fraction
-    for mass_mole_fraction in mass_mole_fraction_list:
-        weight_fraction = mass_mole_fraction / mass_mole_fraction_sum
-        weight_fraction_list.append(weight_fraction)
-    output_list = [DP_list, weight_fraction_list, average_FA_list]
-    return(output_list)
-
-@anvil.server.callable
-def histogram_DP_FAp_weight_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cuts, mass_A, mass_B):
-    # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
-    # cleave and count products per DP and track FA
-    product_dict = {}
-    all_products = 0
-    for substrate in library:
-        product_list = nano2(substrate, cuts)
-        for product in product_list:
-            all_products += 1
-            if len(product) in product_dict:
-                product_dict[len(product)][0] += 1
-                product_dict[len(product)][1] += product.count("A")
-            else:
-                product_dict[len(product)] = [1, product.count("A")]
-    # calculate average FA and prepare output list
-    DP_list = []
-    average_FA_list = []
-    mass_mole_fraction_list = []
-    mass_mole_fraction_sum = 0
-    weight_fraction_list = []
-    for DP in range(min(product_dict), max(product_dict) + 1):
-        if DP in product_dict:
-            DP_list.append(DP)
-            mole_fraction = product_dict[DP][0] / all_products
-            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
-            average_FA_list.append(average_FA)
-            average_mass = DP * (average_FA * mass_A + (1-average_FA) * mass_B) - (DP-1)*18 - 17 # 17 = mass difference between GlcN and anhydromannose
-            mass_mole_fraction = mole_fraction * average_mass
-            mass_mole_fraction_list.append(mass_mole_fraction)
-            mass_mole_fraction_sum += mass_mole_fraction
-    for mass_mole_fraction in mass_mole_fraction_list:
-        weight_fraction = mass_mole_fraction / mass_mole_fraction_sum
-        weight_fraction_list.append(weight_fraction)
-    output_list = [DP_list, weight_fraction_list, average_FA_list]
-    return(output_list)
-
-@anvil.server.callable
-def histogram_DP_strength_molar_enzyme(DP, overall_FA, pattern, strength, molecules, minus_specificity, plus_specificity, efficiency):
-    # generate library
-    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
-    # cleave and count products per DP and track FA
-    product_dict = {}
-    all_products = 0
-    for substrate in library:
-        product_list = enzyme(substrate, minus_specificity, plus_specificity, efficiency)
-        for product in product_list:
-            all_products += 1
-            if len(product) in product_dict:
-                product_dict[len(product)][0] += 1
-                product_dict[len(product)][1] += product.count("A")
-            else:
-                product_dict[len(product)] = [1, product.count("A")]
-    # calculate average FA and prepare output list
-    DP_list = []
-    average_FA_list = []
-    mole_fraction_list = []
-    for DP in range(min(product_dict), max(product_dict) + 1):
-        if DP in product_dict:
-            DP_list.append(DP)
-            mole_fraction = product_dict[DP][0] / all_products
-            mole_fraction_list.append(mole_fraction)
-            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
-            average_FA_list.append(average_FA)
-    output_list = [DP_list, mole_fraction_list, average_FA_list]
-    return(output_list)
-
-@anvil.server.callable
-def histogram_DP_strength_molar_nano2(DP, overall_FA, pattern, strength, molecules, cuts):
-    # generate library
-    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
-    # cleave and count products per DP and track FA
-    product_dict = {}
-    all_products = 0
-    for substrate in library:
-        product_list = nano2(substrate, cuts)
-        for product in product_list:
-            all_products += 1
-            if len(product) in product_dict:
-                product_dict[len(product)][0] += 1
-                product_dict[len(product)][1] += product.count("A")
-            else:
-                product_dict[len(product)] = [1, product.count("A")]
-    # calculate average FA and prepare output list
-    DP_list = []
-    average_FA_list = []
-    mole_fraction_list = []
-    for DP in range(min(product_dict), max(product_dict) + 1):
-        if DP in product_dict:
-            DP_list.append(DP)
-            mole_fraction = product_dict[DP][0] / all_products
-            mole_fraction_list.append(mole_fraction)
-            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
-            average_FA_list.append(average_FA)
-    output_list = [DP_list, mole_fraction_list, average_FA_list]
-    return(output_list)
-
-@anvil.server.callable
-def histogram_DP_strength_weight_enzyme(DP, overall_FA, pattern, strength, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
-    # generate library
-    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and count products per DP and track FA
     product_dict = {}
     all_products = 0
@@ -583,11 +481,11 @@ def histogram_DP_strength_weight_enzyme(DP, overall_FA, pattern, strength, molec
     output_list = [DP_list, weight_fraction_list, average_FA_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def histogram_DP_strength_weight_nano2(DP, overall_FA, pattern, strength, molecules, cuts, mass_A, mass_B):
+def histogram_DP_FAp_weight_nano2(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, cuts, mass_A, mass_B):
     # generate library
-    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and count products per DP and track FA
     product_dict = {}
     all_products = 0
@@ -622,6 +520,151 @@ def histogram_DP_strength_weight_nano2(DP, overall_FA, pattern, strength, molecu
     output_list = [DP_list, weight_fraction_list, average_FA_list]
     return(output_list)
 
+    
+@anvil.server.callable
+def histogram_DP_strength_molar_enzyme(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency):
+    # generate library
+    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
+    # cleave and count products per DP and track FA
+    product_dict = {}
+    all_products = 0
+    for substrate in library:
+        product_list = enzyme(substrate, minus_specificity, plus_specificity, efficiency)
+        for product in product_list:
+            all_products += 1
+            if len(product) in product_dict:
+                product_dict[len(product)][0] += 1
+                product_dict[len(product)][1] += product.count("A")
+            else:
+                product_dict[len(product)] = [1, product.count("A")]
+    # calculate average FA and prepare output list
+    DP_list = []
+    average_FA_list = []
+    mole_fraction_list = []
+    for DP in range(min(product_dict), max(product_dict) + 1):
+        if DP in product_dict:
+            DP_list.append(DP)
+            mole_fraction = product_dict[DP][0] / all_products
+            mole_fraction_list.append(mole_fraction)
+            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
+            average_FA_list.append(average_FA)
+    output_list = [DP_list, mole_fraction_list, average_FA_list]
+    return(output_list)
+
+    
+@anvil.server.callable
+def histogram_DP_strength_molar_nano2(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, cuts):
+    # generate library
+    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
+    # cleave and count products per DP and track FA
+    product_dict = {}
+    all_products = 0
+    for substrate in library:
+        product_list = nano2(substrate, cuts)
+        for product in product_list:
+            all_products += 1
+            if len(product) in product_dict:
+                product_dict[len(product)][0] += 1
+                product_dict[len(product)][1] += product.count("A")
+            else:
+                product_dict[len(product)] = [1, product.count("A")]
+    # calculate average FA and prepare output list
+    DP_list = []
+    average_FA_list = []
+    mole_fraction_list = []
+    for DP in range(min(product_dict), max(product_dict) + 1):
+        if DP in product_dict:
+            DP_list.append(DP)
+            mole_fraction = product_dict[DP][0] / all_products
+            mole_fraction_list.append(mole_fraction)
+            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
+            average_FA_list.append(average_FA)
+    output_list = [DP_list, mole_fraction_list, average_FA_list]
+    return(output_list)
+
+    
+@anvil.server.callable
+def histogram_DP_strength_weight_enzyme(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
+    # generate library
+    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
+    # cleave and count products per DP and track FA
+    product_dict = {}
+    all_products = 0
+    for substrate in library:
+        product_list = enzyme(substrate, minus_specificity, plus_specificity, efficiency)
+        for product in product_list:
+            all_products += 1
+            if len(product) in product_dict:
+                product_dict[len(product)][0] += 1
+                product_dict[len(product)][1] += product.count("A")
+            else:
+                product_dict[len(product)] = [1, product.count("A")]
+    # calculate average FA and prepare output list
+    DP_list = []
+    average_FA_list = []
+    mass_mole_fraction_list = []
+    mass_mole_fraction_sum = 0
+    weight_fraction_list = []
+    for DP in range(min(product_dict), max(product_dict) + 1):
+        if DP in product_dict:
+            DP_list.append(DP)
+            mole_fraction = product_dict[DP][0] / all_products
+            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
+            average_FA_list.append(average_FA)
+            average_mass = DP * (average_FA * mass_A + (1-average_FA) * mass_B) - (DP-1)*18
+            mass_mole_fraction = mole_fraction * average_mass
+            mass_mole_fraction_list.append(mass_mole_fraction)
+            mass_mole_fraction_sum += mass_mole_fraction
+    for mass_mole_fraction in mass_mole_fraction_list:
+        weight_fraction = mass_mole_fraction / mass_mole_fraction_sum
+        weight_fraction_list.append(weight_fraction)
+    output_list = [DP_list, weight_fraction_list, average_FA_list]
+    return(output_list)
+
+    
+@anvil.server.callable
+def histogram_DP_strength_weight_nano2(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, cuts, mass_A, mass_B):
+    # generate library
+    FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
+    # cleave and count products per DP and track FA
+    product_dict = {}
+    all_products = 0
+    for substrate in library:
+        product_list = nano2(substrate, cuts)
+        for product in product_list:
+            all_products += 1
+            if len(product) in product_dict:
+                product_dict[len(product)][0] += 1
+                product_dict[len(product)][1] += product.count("A")
+            else:
+                product_dict[len(product)] = [1, product.count("A")]
+    # calculate average FA and prepare output list
+    DP_list = []
+    average_FA_list = []
+    mass_mole_fraction_list = []
+    mass_mole_fraction_sum = 0
+    weight_fraction_list = []
+    for DP in range(min(product_dict), max(product_dict) + 1):
+        if DP in product_dict:
+            DP_list.append(DP)
+            mole_fraction = product_dict[DP][0] / all_products
+            average_FA = product_dict[DP][1] / (DP * product_dict[DP][0])
+            average_FA_list.append(average_FA)
+            average_mass = DP * (average_FA * mass_A + (1-average_FA) * mass_B) - (DP-1)*18 - 17 # 17 = mass difference between GlcN and anhydromannose
+            mass_mole_fraction = mole_fraction * average_mass
+            mass_mole_fraction_list.append(mass_mole_fraction)
+            mass_mole_fraction_sum += mass_mole_fraction
+    for mass_mole_fraction in mass_mole_fraction_list:
+        weight_fraction = mass_mole_fraction / mass_mole_fraction_sum
+        weight_fraction_list.append(weight_fraction)
+    output_list = [DP_list, weight_fraction_list, average_FA_list]
+    return(output_list)
+
+    
 @anvil.server.callable
 def make_histogram(data, y_label, file_name):
     datax = data[0]
@@ -657,6 +700,7 @@ def make_histogram(data, y_label, file_name):
     # Return this plot as a PNG image in a Media object
     return anvil.mpl_util.plot_image(filename=("%s.png" % file_name))
 
+    
 @anvil.server.callable
 def histogram_csv(data, ylabel, filename):
     df = pd.DataFrame(data).transpose()
@@ -666,10 +710,11 @@ def histogram_csv(data, ylabel, filename):
     return csv_file
 
 #### PRODUCT PROFILE ####
+
 @anvil.server.callable
-def profile_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, minus_specificity, plus_specificity, efficiency):
+def profile_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -693,10 +738,11 @@ def profile_FAp_molar_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, min
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def profile_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cuts):
+def profile_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, cuts):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -719,10 +765,11 @@ def profile_FAp_molar_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cuts
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+
 @anvil.server.callable
-def profile_FAp_weight_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
+def profile_FAp_weight_enzyme(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -751,10 +798,11 @@ def profile_FAp_weight_enzyme(DP, overall_FA, pattern, FA_pattern, molecules, mi
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def profile_FAp_weight_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cuts, mass_A, mass_B):
+def profile_FAp_weight_nano2(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules, cuts, mass_A, mass_B):
     # generate library
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -782,11 +830,12 @@ def profile_FAp_weight_nano2(DP, overall_FA, pattern, FA_pattern, molecules, cut
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def profile_strength_molar_enzyme(DP, overall_FA, pattern, strength, molecules, minus_specificity, plus_specificity, efficiency):
+def profile_strength_molar_enzyme(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency):
     # generate library
     FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -810,11 +859,12 @@ def profile_strength_molar_enzyme(DP, overall_FA, pattern, strength, molecules, 
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+
 @anvil.server.callable
-def profile_strength_molar_nano2(DP, overall_FA, pattern, strength, molecules, cuts):
+def profile_strength_molar_nano2(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, cuts):
     # generate library
     FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -837,11 +887,12 @@ def profile_strength_molar_nano2(DP, overall_FA, pattern, strength, molecules, c
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+
 @anvil.server.callable
-def profile_strength_weight_enzyme(DP, overall_FA, pattern, strength, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
+def profile_strength_weight_enzyme(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, minus_specificity, plus_specificity, efficiency, mass_A, mass_B):
     # generate library
     FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -870,11 +921,12 @@ def profile_strength_weight_enzyme(DP, overall_FA, pattern, strength, molecules,
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+    
 @anvil.server.callable
-def profile_strength_weight_nano2(DP, overall_FA, pattern, strength, molecules, cuts, mass_A, mass_B):
+def profile_strength_weight_nano2(DP, overall_FA, pattern, strength, A_blocks, B_blocks, molecules, cuts, mass_A, mass_B):
     # generate library
     FA_pattern = FA_pattern_calc(overall_FA, pattern, strength)
-    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, molecules)
+    library = chitosan_library(DP, overall_FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
     # cleave and save product compositions
     profile_list = []
     oligomer_list = []
@@ -902,6 +954,7 @@ def profile_strength_weight_nano2(DP, overall_FA, pattern, strength, molecules, 
     output_list = [oligomer_list, proportion_list]
     return(output_list)
 
+    
 @anvil.server.callable
 def make_profile(data, xlabel, file_name, DP_cutoff):
     data_w_cutoff = []
@@ -936,6 +989,7 @@ def make_profile(data, xlabel, file_name, DP_cutoff):
     # Return this plot as a PNG image in a Media object
     return anvil.mpl_util.plot_image(filename=("%s.png" % file_name))
 
+    
 @anvil.server.callable
 def profile_csv(data, ylabel, filename):
     df = pd.DataFrame(data).transpose()
@@ -945,66 +999,71 @@ def profile_csv(data, ylabel, filename):
     return csv_file
 
 #### NMR ####
+
 @anvil.server.callable
-def diads_triads(DP, overall_FA, molecules, strength, pattern):
+def diads_triads(DP, overall_FA, A_blocks, B_blocks, molecules, strength, pattern):
     output_dict = {}
     FA_list = []
     FA_pattern_list = []
     F_AA_list = []
-    F_AD_list = []
-    F_DA_list = []
-    F_DD_list = []
+    F_AB_list = []
+    F_BA_list = []
+    F_BB_list = []
     PA_list = []
     F_AAA_list = []
-    F_AAD_list = []
-    F_DAA_list = []
-    F_ADA_list = []
-    F_ADD_list = []
-    F_DDA_list = []
-    F_DAD_list = []
-    F_DDD_list = []
+    F_AAB_list = []
+    F_BAA_list = []
+    F_ABA_list = []
+    F_ABB_list = []
+    F_BBA_list = []
+    F_BAB_list = []
+    F_BBB_list = []
     step = 0.02
-    if overall_FA == None:
-        FA_range = np.arange(step, 1, step)
+    if A_blocks == 0 and B_blocks == 0:
+        if overall_FA == None:
+            FA_range = np.arange(step, 1, step)
+        else:
+            FA_range = [overall_FA]
     else:
-        FA_range = [overall_FA]
+        FA_range = [A_blocks/(A_blocks + B_blocks)]
     for FA in FA_range:
         FA_list.append(FA)
         FA_pattern = FA_pattern_calc(FA, pattern, strength)
         FA_pattern_list.append(FA_pattern)
-        library = chitosan_library(DP, FA, pattern, FA_pattern, molecules)
+        library = chitosan_library(DP, FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
         diads_PA_values = diads_PA(library)
         F_AA_list.append(diads_PA_values[0])
-        F_AD_list.append(diads_PA_values[1])
-        F_DA_list.append(diads_PA_values[2])
-        F_DD_list.append(diads_PA_values[3])
+        F_AB_list.append(diads_PA_values[1])
+        F_BA_list.append(diads_PA_values[2])
+        F_BB_list.append(diads_PA_values[3])
         PA_list.append(diads_PA_values[4])
         triads_values = triads(library)
         F_AAA_list.append(triads_values[0])
-        F_AAD_list.append(triads_values[1])
-        F_DAA_list.append(triads_values[2])
-        F_ADA_list.append(triads_values[3])
-        F_ADD_list.append(triads_values[4])
-        F_DDA_list.append(triads_values[5])
-        F_DAD_list.append(triads_values[6])
-        F_DDD_list.append(triads_values[7])    
+        F_AAB_list.append(triads_values[1])
+        F_BAA_list.append(triads_values[2])
+        F_ABA_list.append(triads_values[3])
+        F_ABB_list.append(triads_values[4])
+        F_BBA_list.append(triads_values[5])
+        F_BAB_list.append(triads_values[6])
+        F_BBB_list.append(triads_values[7])    
     output_dict["average fraction unit A"] = FA_list
     output_dict["average fraction unit A in pattern"] = FA_pattern_list
     output_dict["F_AA"] = F_AA_list
-    output_dict["F_AB"] = F_AD_list
-    output_dict["F_BA"] = F_DA_list
-    output_dict["F_BB"] = F_DD_list
+    output_dict["F_AB"] = F_AB_list
+    output_dict["F_BA"] = F_BA_list
+    output_dict["F_BB"] = F_BB_list
     output_dict["PA"] = PA_list
     output_dict["F_AAA"] = F_AAA_list
-    output_dict["F_AAB"] = F_AAD_list
-    output_dict["F_BAA"] = F_DAA_list
-    output_dict["F_ABA"] = F_ADA_list
-    output_dict["F_ABB"] = F_ADD_list
-    output_dict["F_BBA"] = F_DDA_list
-    output_dict["F_BAB"] = F_DAD_list
-    output_dict["F_BBB"] = F_DDD_list
+    output_dict["F_AAB"] = F_AAB_list
+    output_dict["F_BAA"] = F_BAA_list
+    output_dict["F_ABA"] = F_ABA_list
+    output_dict["F_ABB"] = F_ABB_list
+    output_dict["F_BBA"] = F_BBA_list
+    output_dict["F_BAB"] = F_BAB_list
+    output_dict["F_BBB"] = F_BBB_list
     return(output_dict)
 
+    
 @anvil.server.callable
 def make_PA_plot(data_nmr, overall_FA, filename):
     datax = data_nmr["average fraction unit A"]
@@ -1024,6 +1083,7 @@ def make_PA_plot(data_nmr, overall_FA, filename):
     # Return this plot as a PNG image in a Media object
     return anvil.mpl_util.plot_image(filename=("%s.png" % filename))
 
+
 @anvil.server.callable
 def nmr_csv(data_nmr, filename):
     df = pd.DataFrame(data_nmr)
@@ -1032,27 +1092,32 @@ def nmr_csv(data_nmr, filename):
     csv_file = anvil.media.from_file('/tmp/data.csv', 'csv', ('%s.csv' % filename))
     return csv_file
 
+
 #### BLOCK SIZES ####
+
 @anvil.server.callable
-def block_sizes(DP, overall_FA, molecules, strength, pattern,
+def block_sizes(DP, overall_FA, A_blocks, B_blocks, molecules, strength, pattern,
                 efficiency, A_cutoff, DP_cutoff, ion_eff):
     output_dict = {}
     FA_list = []
     FA_pattern_list = []
     An_list = []
-    Dn_list = []
+    Bn_list = []
     Aw_list = []
-    Dw_list = []
+    Bw_list = []
     step = 0.02
-    if overall_FA == None:
-        FA_range = np.arange(step, 1, step)
+    if A_blocks == 0 and B_blocks == 0:
+        if overall_FA == None:
+            FA_range = np.arange(step, 1, step)
+        else:
+            FA_range = [overall_FA]
     else:
-        FA_range = [overall_FA]
+        FA_range = [A_blocks/(A_blocks + B_blocks)]
     for FA in FA_range:
         FA_list.append(FA)
         FA_pattern = FA_pattern_calc(FA, pattern, strength)
         FA_pattern_list.append(FA_pattern)
-        library = chitosan_library(DP, FA, pattern, FA_pattern, molecules)
+        library = chitosan_library(DP, FA, pattern, FA_pattern, A_blocks, B_blocks, molecules)
         all_products = []
         for substrate in library:
             product_list = enzyme(substrate, ".BA", "XX.", efficiency)
@@ -1062,17 +1127,18 @@ def block_sizes(DP, overall_FA, molecules, strength, pattern,
                 all_products.append(product)
         output = blocks(all_products, A_cutoff, DP_cutoff, ion_eff)
         An_list.append(output[0])
-        Dn_list.append(output[1])
+        Bn_list.append(output[1])
         Aw_list.append(output[2])
-        Dw_list.append(output[3])
+        Bw_list.append(output[3])
     output_dict["average fraction unit A"] = FA_list
     output_dict["average fraction unit A in pattern"] = FA_pattern_list
     output_dict["block(A)n"] = An_list
-    output_dict["block(B)n"] = Dn_list
+    output_dict["block(B)n"] = Bn_list
     output_dict["block(A)w"] = Aw_list
-    output_dict["block(B)w"] = Dw_list
+    output_dict["block(B)w"] = Bw_list
     return(output_dict)
 
+    
 @anvil.server.callable
 def make_blocks_plot(data_blocks, overall_FA, filename):
     datax = data_blocks["average fraction unit A"]
@@ -1087,7 +1153,6 @@ def make_blocks_plot(data_blocks, overall_FA, filename):
         plt.scatter(datax, data_Bw, marker="o", s=120, c='#E9C46A', label = "block(B)w")
         plt.scatter(datax, data_An, marker="o", s=120, c='#264653', label = "block(A)n")
         plt.scatter(datax, data_Aw, marker="o", s=120, c='#2A9D8F', label = "block(A)w")
-
     else:
         plt.plot(datax, data_Bn, color='#E76F51', label = "block(B)n", linewidth=5.0)
         plt.plot(datax, data_Bw, color='#E9C46A', label = "block(B)w", linewidth=5.0)
@@ -1103,6 +1168,7 @@ def make_blocks_plot(data_blocks, overall_FA, filename):
     # Return this plot as a PNG image in a Media object
     return anvil.mpl_util.plot_image(filename=("%s.png" % filename))
 
+    
 @anvil.server.callable
 def blocks_csv(data_blocks, filename):
     df = pd.DataFrame(data_blocks)

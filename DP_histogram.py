@@ -10,18 +10,34 @@ class DP_histogram(DP_histogramTemplate):
     def __init__(self, **properties):
         # Set Form properties and Data Bindings.
         self.init_components(**properties)
-        self.card_nr_PA_options.visible = False
-        self.strength_box.visible = False
-        self.FA_pattern_box.visible = False
+        self.card_nr_A_overrep.visible = False
+        self.card_nr_block_options.visible = False
         self.card_enzyme_options.visible = False
         self.card_weight_monomers.visible = False
         self.card_nano2_options.visible = False
         self.download_link_plot.visible = False
         self.download_link_data.visible = False
-    
+        self.radio_button_A_overrep.visible = False
+        self.radio_button_blocks.visible = False
     
     def submit_button_click(self, **event_args):
         # check if radio buttons were clicked
+        if self.radio_button_A_overrep.visible == True:
+            if (self.radio_button_A_overrep.selected == False and
+                self.radio_button_blocks.selected == False):
+                    Notification("Choose type of non-random pattern of A-units",
+                                title="Input missing!",
+                                timeout=5,
+                                style="danger").show()
+                    return
+        if self.card_nr_A_overrep.visible == True:
+            if (self.radio_button_FAp.selected == False and
+                self.radio_button_strength.selected == False):
+                    Notification("Specify type of A-unit overrepresentation",
+                                    title="Input missing!",
+                                    timeout=5,
+                                    style="danger").show()
+                    return
         if (self.radio_button_enzyme.selected == False and
             self.radio_button_nano2.selected == False):
                 Notification("Choose cleavage type: 'enzymatic' or 'NaNO2'",
@@ -58,7 +74,57 @@ class DP_histogram(DP_histogramTemplate):
                             timeout=5,
                             style="danger").show()
                 return
-        if self.overall_FA_box.text == "":
+        if self.card_nr_block_options.visible == True and self.A_block_size_box.text == "":
+            A_blocks = 3
+        elif self.card_nr_block_options.visible == False:
+            A_blocks = 0
+        else:
+            try:
+                A_blocks = int(self.A_block_size_box.text)
+                if A_blocks < 1:
+                    Notification("The A-block size needs to larger or equal to 1",
+                             title="Non-accepted input!",
+                            timeout=5,
+                            style="danger").show()
+                    return
+                elif A_blocks > 100:
+                    Notification("The A-block size is rather high, the generated output might not be meaningful (see home, section 'Polymer library')",
+                             title="Potentially unsuitable input!",
+                            timeout=5,
+                            style="warning").show()
+            except:
+                Notification("Only integers are accepted as input for the A-block sizes, e.g. 3",
+                             title="Non-accepted input!",
+                            timeout=5,
+                            style="danger").show()
+                return
+        if self.card_nr_block_options.visible == True and self.B_block_size_box.text == "":
+            B_blocks = 3
+        elif self.card_nr_block_options.visible == False:
+            B_blocks = 0
+        else:
+            try:
+                B_blocks = int(self.B_block_size_box.text)
+                if B_blocks < 1:
+                    Notification("The B-block size needs to larger or equal to 1",
+                             title="Non-accepted input!",
+                            timeout=5,
+                            style="danger").show()
+                    return
+                elif B_blocks > 100:
+                    Notification("The B-block size is rather high, the generated output might not be meaningful (see home, section 'Polymer library')",
+                             title="Potentially unsuitable input!",
+                            timeout=5,
+                            style="warning").show()
+            except:
+                Notification("Only integers are accepted as input for the B-block sizes, e.g. 3",
+                             title="Non-accepted input!",
+                            timeout=5,
+                            style="danger").show()
+                return
+        if self.card_nr_block_options.visible == True:
+            overall_FA = A_blocks/(A_blocks + B_blocks)
+        elif self.overall_FA_box.text == "":
             overall_FA = 0.32
         else:
             try:
@@ -96,7 +162,7 @@ class DP_histogram(DP_histogramTemplate):
                             timeout=5,
                             style="danger").show()
                 return
-        if self.pattern_box.text == "" or self.card_nr_PA_options.visible == False:
+        if self.pattern_box.text == "" or self.card_nr_A_overrep.visible == False:
             pattern = 3
         else:
             try:
@@ -118,7 +184,7 @@ class DP_histogram(DP_histogramTemplate):
                             timeout=5,
                             style="danger").show()
                 return
-        if self.FA_pattern_box.text == "" or self.card_nr_PA_options.visible == False:
+        if self.FA_pattern_box.text == "" or self.card_nr_A_overrep.visible == False:
             FA_pattern = overall_FA
         else:
             try:
@@ -140,7 +206,7 @@ class DP_histogram(DP_histogramTemplate):
                             timeout=5,
                             style="danger").show()
                 return
-        if self.strength_box.text == "" or self.card_nr_PA_options.visible == False:
+        if self.strength_box.text == "" or self.card_nr_A_overrep.visible == False:
             strength = 0
         else:
             try:
@@ -286,93 +352,93 @@ class DP_histogram(DP_histogramTemplate):
             y_label = "molar fraction"
             if self.radio_button_enzyme.selected == True:
                 if self.radio_button_FAp.selected == True:
-                    filename = "hist_enz_molar_DP%s_FA%s_mol%s_FAp%s_p%s_-%s_+%s_e%s" % (DP, overall_FA,
+                    filename = "hist_enz_molar_DP%s_FA%s_%sA_%sB_mol%s_FAp%s_p%s_-%s_+%s_e%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, FA_pattern,
                                                                                             pattern, minus_specificity,
                                                                                             plus_specificity, efficiency)
                     data_DP_histogram = anvil.server.call('histogram_DP_FAp_molar_enzyme',
                                                     DP, overall_FA,
                                                     pattern, FA_pattern,
-                                                    molecules,
+                                                    A_blocks, B_blocks, molecules,
                                                     minus_specificity,
                                                     plus_specificity,
                                                     efficiency)
                 else:
-                    filename = "hist_enz_molar_DP%s_FA%s_mol%s_s%s_p%s_-%s_+%s_e%s" % (DP, overall_FA,
+                    filename = "hist_enz_molar_DP%s_FA%s_%sA_%sB_mol%s_s%s_p%s_-%s_+%s_e%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, strength,
                                                                                             pattern, minus_specificity,
                                                                                             plus_specificity, efficiency)
                     data_DP_histogram = anvil.server.call('histogram_DP_strength_molar_enzyme',
                                                     DP, overall_FA,
                                                     pattern, strength,
-                                                    molecules,
+                                                    A_blocks, B_blocks, molecules,
                                                     minus_specificity,
                                                     plus_specificity,
                                                     efficiency)
             elif self.radio_button_nano2.selected == True:
                 if self.radio_button_FAp.selected == True:
-                    filename = "hist_nano2_molar_DP%s_FA%s_mol%s_FAp%s_p%s_c%s" % (DP, overall_FA,
+                    filename = "hist_nano2_molar_DP%s_FA%s_%sA_%sB_mol%s_FAp%s_p%s_c%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, FA_pattern,
                                                                                             pattern, cuts)
                     data_DP_histogram = anvil.server.call('histogram_DP_FAp_molar_nano2',
                                                     DP, overall_FA,
                                                     pattern, FA_pattern,
-                                                    molecules, cuts)
+                                                    A_blocks, B_blocks, molecules, cuts)
                 else:
-                    filename = "hist_nano2_molar_DP%s_FA%s_mol%s_s%s_p%s_c%s" % (DP, overall_FA,
+                    filename = "hist_nano2_molar_DP%s_FA%s_%sA_%sB_mol%s_s%s_p%s_c%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, strength,
                                                                                             pattern, cuts)
                     data_DP_histogram = anvil.server.call('histogram_DP_strength_molar_nano2',
                                                     DP, overall_FA,
                                                     pattern, strength,
-                                                    molecules, cuts)
+                                                    A_blocks, B_blocks, molecules, cuts)
         elif self.radio_button_weight_fraction.selected == True:
             y_label = "weight fraction"
             if self.radio_button_enzyme.selected == True:
                 if self.radio_button_FAp.selected == True:
-                    filename = "hist_enz_weight_DP%s_FA%s_mol%s_FAp%s_p%s_-%s_+%s_e%s" % (DP, overall_FA,
+                    filename = "hist_enz_weight_DP%s_FA%s_%sA_%sB_mol%s_FAp%s_p%s_-%s_+%s_e%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, FA_pattern,
                                                                                             pattern, minus_specificity,
                                                                                             plus_specificity, efficiency)
                     data_DP_histogram = anvil.server.call('histogram_DP_FAp_weight_enzyme',
                                                     DP, overall_FA,
                                                     pattern, FA_pattern,
-                                                    molecules,
+                                                    A_blocks, B_blocks, molecules,
                                                     minus_specificity,
                                                     plus_specificity,
                                                     efficiency,
                                                     mass_A, mass_B)
                 else:
-                    filename = "hist_enz_weight_DP%s_FA%s_mol%s_s%s_p%s_-%s_+%s_e%s" % (DP, overall_FA,
+                    filename = "hist_enz_weight_DP%s_FA%s_%sA_%sB_mol%s_s%s_p%s_-%s_+%s_e%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, strength,
                                                                                             pattern, minus_specificity,
                                                                                             plus_specificity, efficiency)
                     data_DP_histogram = anvil.server.call('histogram_DP_strength_weight_enzyme',
                                                     DP, overall_FA,
                                                     pattern, strength,
-                                                    molecules,
+                                                    A_blocks, B_blocks, molecules,
                                                     minus_specificity,
                                                     plus_specificity,
                                                     efficiency,
                                                     mass_A, mass_B)
             elif self.radio_button_nano2.selected == True:
                 if self.radio_button_FAp.selected == True:
-                    filename = "hist_nano2_weight_DP%s_FA%s_mol%s_FAp%s_p%s_c%s" % (DP, overall_FA,
+                    filename = "hist_nano2_weight_DP%s_FA%s_%sA_%sB_mol%s_FAp%s_p%s_c%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, FA_pattern,
                                                                                             pattern, cuts)
                     data_DP_histogram = anvil.server.call('histogram_DP_FAp_weight_nano2',
                                                     DP, overall_FA,
                                                     pattern, FA_pattern,
-                                                    molecules, cuts,
+                                                    A_blocks, B_blocks, molecules, cuts,
                                                     mass_A, mass_B)
                 else:
-                    filename = "hist_nano2_weight_DP%s_FA%s_mol%s_s%s_p%s_c%s" % (DP, overall_FA,
+                    filename = "hist_nano2_weight_DP%s_FA%s_%sA_%sB_mol%s_s%s_p%s_c%s" % (DP, overall_FA, A_blocks, B_blocks,
                                                                                             molecules, strength,
                                                                                             pattern, cuts)
                     data_DP_histogram = anvil.server.call('histogram_DP_strength_weight_nano2',
                                                     DP, overall_FA,
                                                     pattern, strength,
-                                                    molecules, cuts,
+                                                    A_blocks, B_blocks, molecules, cuts,
                                                     mass_A, mass_B)     
         # create plot and show options to download
         media_obj = anvil.server.call('make_histogram',
@@ -387,27 +453,44 @@ class DP_histogram(DP_histogramTemplate):
         self.download_link_data.visible = True
         self.image_1.scroll_into_view()
     
-
     def check_box_nr_PA_change(self, **event_args):
         """This method is called when this checkbox is checked or unchecked"""
+        self.label_overall_FA.visible = True
+        self.overall_FA_box.visible = True
         if self.check_box_nr_PA.checked == True:
-            self.card_nr_PA_options.visible = True
-            #self.card_nr_PA_options.scroll_into_view()
+            self.radio_button_A_overrep.visible = True
+            self.radio_button_blocks.visible = True
+            self.radio_button_A_overrep.selected = False
+            self.radio_button_blocks.selected = False
         else:
-            self.card_nr_PA_options.visible = False
+            self.radio_button_A_overrep.visible = False
+            self.radio_button_blocks.visible = False
+            self.card_nr_A_overrep.visible = False
+            self.card_nr_block_options.visible = False
 
+    def radio_button_A_overrep_clicked(self, **event_args):
+        """This method is called when this radio button is selected"""
+        self.card_nr_A_overrep.visible = True
+        self.card_nr_block_options.visible = False
+        self.label_overall_FA.visible = True
+        self.overall_FA_box.visible = True
+    
+    def radio_button_blocks_clicked(self, **event_args):
+        """This method is called when this radio button is selected"""
+        self.card_nr_A_overrep.visible = False
+        self.card_nr_block_options.visible = True
+        self.label_overall_FA.visible = False
+        self.overall_FA_box.visible = False
     
     def radio_button_FAp_clicked(self, **event_args):
         """This method is called when this radio button is selected"""
         self.strength_box.visible = False
         self.FA_pattern_box.visible = True
-
     
     def radio_button_strength_clicked(self, **event_args):
         """This method is called when this radio button is selected"""
         self.strength_box.visible = True
         self.FA_pattern_box.visible = False
-
 
     def radio_button_enzyme_clicked(self, **event_args):
         """This method is called when this radio button is selected"""
@@ -464,4 +547,10 @@ class DP_histogram(DP_histogramTemplate):
         self.submit_button_click()
 
     def mass_B_box_pressed_enter(self, **event_args):
+        self.submit_button_click()
+
+    def A_block_size_box_pressed_enter(self, **event_args):
+        self.submit_button_click()
+
+    def B_block_size_box_pressed_enter(self, **event_args):
         self.submit_button_click()
